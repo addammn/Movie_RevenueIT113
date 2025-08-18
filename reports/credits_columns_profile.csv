@@ -1,0 +1,5 @@
+column,dtype,non_null,nulls,null_pct
+movie_id,int64,4803,0,0.0
+title,object,4803,0,0.0
+cast,object,4803,0,0.0
+crew,object,4803,0,0.0
