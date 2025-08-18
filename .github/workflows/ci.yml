@@ -1,0 +1,103 @@
+name: CI - Build Features & Baseline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:  # allow manual runs from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-train:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          # Ensure these are present even if requirements.txt is minimal
+          pip install kaggle pandas numpy pyarrow matplotlib scikit-learn joblib mlflow
+
+      - name: Configure Kaggle credentials
+        shell: pwsh
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.kaggle" | Out-Null
+          $json = "{""username"":""$env:KAGGLE_USERNAME"",""key"":""$env:KAGGLE_KEY""}"
+          Set-Content -Path "$env:USERPROFILE\.kaggle\kaggle.json" -Value $json -Encoding ASCII
+          # optional visibility
+          Write-Host "kaggle.json created at $env:USERPROFILE\.kaggle"
+
+      - name: Download TMDB dataset to data\raw
+        shell: pwsh
+        run: |
+          mkdir data\raw -Force
+          python -m kaggle datasets download -d tmdb/tmdb-movie-metadata -p data/raw --unzip
+          Get-ChildItem data\raw
+
+      - name: Build features (Step 3)
+        shell: pwsh
+        run: python src\models\..\features\build_features.py
+
+      - name: Train baseline (Step 4)
+        shell: pwsh
+        run: python src\models\train_baseline.py
+
+      # Optional: log to local 'mlruns' so you can download the tracking folder
+      - name: Train with MLflow (local runs)
+        shell: pwsh
+        run: python src\models\train_with_mlflow.py
+        continue-on-error: true   # don't fail the whole workflow if optional step errs
+
+      - name: Upload artifacts - reports (metrics, predictions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            reports/**
+            !reports/_tmp_artifacts/**  # skip temp files if present
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload artifacts - models (pickles)
+        uses: actions/upload-artifact@v4
+        with:
+          name: models
+          path: models/**
+          if-no-files-found: warn
+          retention-days: 7
+
+      # Optional: also upload mlruns (can be large; enable only if you need UI-less runs)
+      - name: Upload artifacts - mlruns (MLflow local store)
+        if: ${{ hashFiles('mlruns/**') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlruns
+          path: mlruns/**
+          retention-days: 3
