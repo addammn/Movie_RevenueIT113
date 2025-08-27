@@ -21,3 +21,5 @@ Simple goal: **predict movie revenue** and **compare two models** side-by-side.
 ## 📝 Run in Google Colab
 Open directly from GitHub:
 
+## 🔗 Live App
+[Open the Streamlit app](https://movierevenueit113.streamlit.app)
