@@ -1,0 +1,12 @@
+{
+  "columns": [
+    "budget_musd",
+    "runtime_min",
+    "popularity",
+    "vote_average",
+    "genre",
+    "release_month",
+    "is_sequel",
+    "franchise_strength"
+  ]
+}
